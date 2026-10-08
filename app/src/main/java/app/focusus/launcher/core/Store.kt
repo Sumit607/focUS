@@ -138,4 +138,8 @@ object Session {
     val nextReminderAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
     @Volatile var foregroundPkg: String? = null
     @Volatile var foregroundSince: Long = 0L
+    /** When the current uninterrupted use of the foreground app began. */
+    @Volatile var sessionStart: Long = 0L
+    /** The app the last gate screen was shown for; returning from that gate keeps the session going. */
+    @Volatile var gatePkg: String? = null
 }
