@@ -45,6 +45,23 @@ jobs:
           path: out/*.apk
           retention-days: 30
 
+      - name: Publish APK to the builds branch
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          set -e
+          mkdir -p /tmp/builds
+          cp out/*.apk /tmp/builds/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan builds-tmp
+          git rm -rf --cached . -q
+          cp /tmp/builds/*.apk ./focUS-latest.apk
+          echo "$GITHUB_SHA" > SOURCE_COMMIT
+          echo "0.1.${GITHUB_RUN_NUMBER}" > VERSION
+          git add -f focUS-latest.apk SOURCE_COMMIT VERSION
+          git commit -q -m "APK 0.1.${GITHUB_RUN_NUMBER} from ${GITHUB_SHA}"
+          git push -f origin builds-tmp:builds
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

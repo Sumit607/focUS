@@ -46,6 +46,9 @@ class FocusAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var screenOn = true
     private var ignored: Set<String> = emptySet()
+    private var homePackages: Set<String> = emptySet()
+    /** Package of the most recent real window, so timed checks only act while the user is inside that app. */
+    @Volatile private var lastWindowPkg: String? = null
     private var receiverRegistered = false
 
     private val ticker = object : Runnable {
@@ -88,6 +91,7 @@ class FocusAccessibilityService : AccessibilityService() {
         Store.init(applicationContext)
         Apps.init(applicationContext)
         ignored = computeIgnored()
+        homePackages = computeHomes()
         if (!receiverRegistered) {
             val filter = IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_OFF)
@@ -110,13 +114,26 @@ class FocusAccessibilityService : AccessibilityService() {
         return set
     }
 
+    /** Every installed home-screen app (vivo's own launcher included), so leaving to it ends the app session. */
+    private fun computeHomes(): Set<String> = try {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        packageManager.queryIntentActivities(intent, 0).mapTo(HashSet()) { it.activityInfo.packageName }
+    } catch (_: Exception) {
+        emptySet()
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         if (pkg in ignored) return
+        lastWindowPkg = pkg
         try {
             if (pkg == packageName) {
                 onOwnWindow(event.className?.toString().orEmpty())
+                return
+            }
+            if (pkg in homePackages) {
+                onOtherHome(pkg)
                 return
             }
             if (!Apps.isLaunchable(pkg)) return
@@ -142,6 +159,34 @@ class FocusAccessibilityService : AccessibilityService() {
         Session.nextReminderAt.clear()
     }
 
+    private fun onOtherHome(pkg: String) {
+        Session.foregroundPkg = pkg
+        Session.foregroundSince = System.currentTimeMillis()
+        Session.gatePkg = null
+        Session.nextReminderAt.clear()
+    }
+
+    /**
+     * Sends the user Home first, then shows the gate from there. Going Home always works, and with
+     * focUS in front Android (and vivo's pop-up restriction) allows the gate screen to open.
+     * Because the app is no longer underneath, the gate re-opens it if the user chooses to continue.
+     */
+    private fun showGate(pkg: String, d: Decision) {
+        Session.gatePkg = pkg
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        handler.postDelayed({
+            try {
+                when (d) {
+                    is Decision.Block -> Gate.showBlock(this, pkg, fromLauncher = true)
+                    is Decision.Pause -> Gate.showPause(this, pkg, d.seconds, fromLauncher = true)
+                    Decision.Open -> {}
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "could not show gate", e)
+            }
+        }, 150L)
+    }
+
     private fun onAppForeground(pkg: String) {
         val now = System.currentTimeMillis()
         val returningFromGate = Session.gatePkg == pkg
@@ -155,14 +200,7 @@ class FocusAccessibilityService : AccessibilityService() {
         Session.gatePkg = null
 
         when (val d = Launch.decide(this, pkg, now)) {
-            is Decision.Block -> {
-                Session.gatePkg = pkg
-                Gate.showBlock(this, pkg, fromLauncher = false)
-            }
-            is Decision.Pause -> {
-                Session.gatePkg = pkg
-                Gate.showPause(this, pkg, d.seconds, fromLauncher = false)
-            }
+            is Decision.Block, is Decision.Pause -> showGate(pkg, d)
             Decision.Open -> armReminder(pkg, now)
         }
     }
@@ -181,7 +219,9 @@ class FocusAccessibilityService : AccessibilityService() {
 
     private fun tick() {
         val pkg = Session.foregroundPkg ?: return
-        if (pkg == packageName) return
+        if (pkg == packageName || pkg in homePackages) return
+        // Only act while the user is actually inside this app (not in a system screen or another launcher).
+        if (lastWindowPkg != pkg) return
         val now = System.currentTimeMillis()
         val state = Store.value
 
@@ -197,8 +237,7 @@ class FocusAccessibilityService : AccessibilityService() {
         // A schedule started or a daily limit was reached while the app was open.
         val d = Launch.decide(this, pkg, now)
         if (d is Decision.Block) {
-            Session.gatePkg = pkg
-            Gate.showBlock(this, pkg, fromLauncher = false)
+            showGate(pkg, d)
             return
         }
 

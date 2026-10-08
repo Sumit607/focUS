@@ -468,8 +468,9 @@ fun PermissionsScreen(nav: Nav, state: FocusState) {
             PlainNote("vivo's battery manager closes background apps aggressively. For a reliable app guard:")
             PlainNote("1. Settings → Battery → Background power consumption management → focUS → Allow.")
             PlainNote("2. Settings → Apps → Autostart (or i Manager → App management → Autostart) → turn on focUS.")
-            PlainNote("3. In Recents, pull down on focUS (or tap the lock) so it isn't cleared.")
-            PlainNote("4. Accessibility lives in Settings → Shortcuts & accessibility → Accessibility → focUS app guard.")
+            PlainNote("3. Settings → Apps → focUS → Permissions → allow “Display pop-up windows” and “Display pop-up windows while running in the background” (names vary slightly by version).")
+            PlainNote("4. In Recents, pull down on focUS (or tap the lock) so it isn't cleared.")
+            PlainNote("5. Accessibility lives in Settings → Shortcuts & accessibility → Accessibility → focUS app guard.")
             Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                 PillButton("Open vivo background settings", { Permissions.openVivoBackgroundSettings(ctx) }, Modifier.fillMaxWidth())
             }
