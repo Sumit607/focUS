@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">focUS</string>
+    <string name="a11y_label">focUS app guard</string>
+    <string name="a11y_description">focUS uses this service only to see which app is opening, so it can show a pause or block screen for apps you chose. It does not read screen content, what you type or passwords, and focUS has no internet access, so nothing leaves your phone.</string>
+    <string name="notif_label">focUS notification filter</string>
+</resources>
